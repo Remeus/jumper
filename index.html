@@ -1,0 +1,280 @@
+<!doctype html> 
+<html> 
+<head> 
+	<meta charset="UTF-8" />
+	<title>Jump</title>
+	<script type="text/javascript" src="js/phaser.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+            background: #000;
+        }
+        .notification {
+            background: #333;
+            color: white;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .id {
+            display: inline-block;
+        }
+        .nPlayers {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="notification">
+        <div class="id"></div>
+        <div class="nPlayers"></div>
+    </div>
+    
+    <script type="text/javascript">
+
+    var game = new Phaser.Game(800, 600, Phaser.AUTO, '', { preload: preload, create: create, update: update });
+
+    function preload() {
+        game.load.image('sky', 'assets/sky.png');
+        game.load.image('ground', 'assets/platform.png');
+        game.load.spritesheet('pingouin', 'assets/ping.png', 46, 48);
+    }
+
+    var platforms;
+    var player;
+    var cursors;
+    var winText;
+    var loseText;
+    var scoreText;
+    var highScoreText;
+    var counter = 0;
+    var highScore = 0;
+    var timer;
+    var maxX = 0;
+    var playerJumped;
+    var hasBeenSaved = false;
+
+    var SPEED_INI = 800;
+    var speed = SPEED_INI;
+    var WEIGHT = 1400;
+    var JUMP = 400;
+    var WEIGHT_JUMP = 1000;
+    var BOUNCE = 0.1;
+
+    var coord = [
+        [150, 250], //Start
+        [550, 250],
+        [950, 250], 
+        [1350, 250], 
+        [2650, 100], //Up1
+        [3050, 100], 
+        [4000, 550], //Down 1
+        [4400, 550],
+        [5200, 500], //Down 2
+        [6100, 350], //Middle 1
+        [6700, 300], //Middle 2
+        [7100, 300],
+        [8500, 560], //Down 3
+        [9500, 400], //Middle 3
+        [10000, 50], //Up 2
+        [10500, 350], //Middle 4
+        [11200, 500], //Down 4
+    ];
+
+    function create() {
+
+        game.scale.maxWidth = 800;
+        game.scale.maxHeight = 600;
+        game.scale.pageAlignVertically = true;
+        game.scale.pageAlignHorizontally = true;
+        game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+        game.scale.setScreenSize();
+
+        game.physics.startSystem(Phaser.Physics.ARCADE);
+
+        start();
+
+    }
+
+    function update() {
+
+        game.physics.arcade.collide(player, platforms, setFriction, null, this);
+
+        cursors = game.input.keyboard.createCursorKeys();
+
+        platforms.forEach(function(platform) {
+            if (platform.body.x <= -400) {
+                platform.body.x = maxX;
+            }
+        });
+
+        if (player.body.touching.down)
+            player.animations.play('right');
+        else
+            player.animations.play('jump');
+
+
+        if ((cursors.up.isDown || game.input.pointer1.isDown || game.input.activePointer.isDown) && player.body.touching.down) {
+            player.body.velocity.y = -JUMP;
+            playerJumped = true;
+        }
+        else if ((cursors.up.isDown || game.input.pointer1.isDown || game.input.activePointer.isDown) && playerJumped && player.body.velocity.y < 0) {
+            player.body.gravity.y = WEIGHT - WEIGHT_JUMP;
+        }
+        else {
+            playerJumped = false;
+            player.body.gravity.y = WEIGHT;
+        }
+
+        if (player.body.y >= game.world.height - 50 || player.body.x <= 0) {
+            if (!hasBeenSaved) {
+                 player.kill();
+                if (counter * 10 <= highScore) {
+                    loseText.setText("GAME OVER\n\nPress DOWN to start again");
+                }
+                else {
+                    winText.setText("NEW HIGH SCORE\n\nPress DOWN to start again");
+                    highScore = counter * 10;
+                    if (!hasBeenSaved)
+                        saveHighScore(counter * 10);
+                }
+                saveScore(counter * 10);
+                platforms.forEach(function(platform) {
+                    platform.body.velocity.x = 0;
+                });
+                game.time.events.remove(timer);
+                hasBeenSaved = true;
+            }
+            if (cursors.down.isDown || game.input.pointer1.isDown || game.input.activePointer.isDown) {
+                start();
+            }
+        }
+
+    }
+
+    function setFriction(player, platform) {
+        player.body.x -= platform.body.x - platform.body.prev.x;
+    }
+
+    function updateCounter() {
+        counter++;
+        scoreText.setText('Score: ' + counter * 10 + 'm');
+        speed += 10;
+        platforms.setAll('body.velocity.x', -speed);
+    }
+
+    function saveScore(score) {
+        $.ajax({
+          type: "POST",
+          url: "http://localhost:8080/Jump/scripts/saveScore.php",
+          data: "score=" + score,
+          error: function() {
+            console.log('Error');
+          },
+          success: function() {
+          }
+        });
+    }
+
+    function getHighScore(handle) {
+        $.ajax({
+          type: "GET",
+          url: "http://localhost:8080/Jump/scripts/getHighScore.php",
+          error: function() {
+            console.log('Error');
+            handle(0);
+          },
+          success: function(response) {
+             handle(response);
+          }
+        });
+    }
+
+    function saveHighScore(highScore) {
+       $.ajax({
+          type: "POST",
+          url: "http://localhost:8080/Jump/scripts/saveHighScore.php",
+          data: "highScore=" + highScore,
+          error: function() {
+            console.log('Error');
+          },
+          success: function() {
+          }
+        });
+    }
+
+    function start() {
+        counter = 0;
+        speed = SPEED_INI;
+        hasBeenSaved = false;
+        highScore = 0;
+        playerJumped = false;
+
+        game.add.sprite(0, 0, 'sky');
+
+        platforms = game.add.group();
+        platforms.enableBody = true;
+        for (i = 0 ; i < coord.length ; i++) {
+            platforms.create(coord[i][0], coord[i][1], 'ground');
+            if (coord[i][0] > maxX)
+                maxX = coord[i][0];
+        }
+        platforms.setAll('body.velocity.x', -SPEED_INI);
+        platforms.setAll('body.immovable', true);
+
+        player = game.add.sprite(32, 0, 'pingouin');
+        player.anchor.setTo(0.5, 0.5);
+        player.scale.set(1, 1);
+        game.physics.arcade.enable(player);
+        player.body.bounce.y = BOUNCE;
+        player.body.gravity.y = WEIGHT;
+        player.body.collideWorldBounds = true;
+        player.animations.add('right', [0, 1, 2, 3], 10, true);
+        player.animations.add('jump', [4, 5, 6], 10, true);
+
+        winText = game.add.text(game.world.width/2 - 200, game.world.height/2 - 50, '', { font: '30px Arial', fill: '#0ab10a', wordWrap: true, wordWrapWidth: game.world.width, align: "center"  });
+        loseText = game.add.text(game.world.width/2 - 200, game.world.height/2 - 50, '', { font: '30px Arial', fill: '#d22', wordWrap: true, wordWrapWidth: game.world.width, align: "center"  });
+        scoreText = game.add.text(game.world.width - 220, 16, 'Score: 0', { font: '25px Verdana', fill: '#000' });
+        highScoreText = game.add.text(game.world.width - 220, game.world.height - 50, 'Highest: ', { font: '25px Verdana', fill: '#fff' });
+
+        getHighScore(function(score) {
+            highScore = score;
+            highScoreText.text = 'Highest: ' + score + 'm';
+        });
+
+        timer = game.time.events.loop(Phaser.Timer.SECOND * 0.6, updateCounter, this);
+    }
+
+    </script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+<!--    <script src="/socket.io/socket.io.js"></script>-->
+    <script>
+        
+//        var socket = io.connect('http://localhost:8080');
+//        
+//        socket.on('onconnected', function(data) {
+//            $('.id').html('You are connected: ' + data.id);
+//            socket.emit('new player', { x: player.body.x, y: player.body.y});
+//        })
+//        
+//        .on('disconnect', function() {
+//            $('.id').html('You are no longer connected.');
+//        })
+//        
+//        .on('new player', function(data) {
+//            $('.nPlayers').html($('.nPlayers').html()++);
+//        })
+//        
+//        .on('move player', function(data) {
+//            
+//        })
+//        
+//        .on('remove player', function(data) {
+//            
+//        })
+        
+    </script>
+    
+</body>
+</html>
